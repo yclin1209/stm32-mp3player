@@ -1,0 +1,36 @@
+This is a MP3 player for STM32F4 Discovery Board.
+It is based on the source code povided by "Benjamin's robotics",
+you can refer to the following URL:
+
+http://vedder.se/2012/12/stm32f4-discovery-usb-host-and-mp3-player/
+
+
+stm32_mp3player provide the following function:
+1. Play the MP3 in USB DISK.
+2. Detect MP3's BPM(Beat per Minitue).
+3. Change the playing speed dynamic.
+
+
+Usage:
+1. download arm-gcc compiler, and extract to some directory
+    You can download it from
+    http://www.mentor.com/embedded-software/sourcery-tools/sourcery-codebench/editions/lite-edition/request?id=e023fac2-e611-476b-a702-90eabb2aeca8&downloadlite=scblite2012&fmpath=/embedded-software/sourcery-tools/sourcery-codebench/editions/lite-edition/form
+    or from
+    https://launchpad.net/gcc-arm-embedded/+download
+
+2. check the bin directory of your compiler, such as
+"/opt/arm-2011.09/bin/", and modify the "config.mk", set
+the BINPATH correctly.
+
+3. type 'make' in current directory, then you will get the
+elf or bin files in build directory.
+
+Author:
+Lipeng<runangaozhong@163.com>
+
+
+Changelog:
+
+2013/10/07
+the initial version, only MP3 playing is supported.
+
