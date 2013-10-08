@@ -46,6 +46,7 @@ static volatile uint8_t     audio_is_playing = 0;
 
 /* just for test */
 extern float                cur_ratio;
+static uint16_t             cur_bpm = 0;
 
 /*========================================================
  *          Private functions
@@ -66,7 +67,41 @@ static uint32_t fd_fetch(void *parameter, uint8_t *buffer, uint32_t length) {
     return read_bytes;
 }
 
+/*
+ * bpm detect
+ */
+static void mp3_get_bpm(char* filename) {
+    struct mp3_decoder  *decoder;
+    uint16_t            bpm;
 
+	if (FR_OK == f_open(&file, filename, FA_OPEN_EXISTING | FA_READ)) {
+		/* decode mp3 */
+
+        decoder = mp3_decoder_create();
+        if (decoder != NULL) {
+            decoder->fetch_data         = fd_fetch;
+            decoder->fetch_parameter    = (void *)&file;
+            decoder->output_cb          = NULL;     /* no need */
+
+            if ((bpm = mp3_bpm_detect_run(decoder)) > 0) {
+                cur_bpm = bpm;
+            }
+
+            /* delete decoder object */
+            mp3_decoder_delete(decoder);
+        }
+        
+        /* Re-initialize and set volume to avoid noise */
+        InitializeAudio(Audio44100HzSettings);
+        SetAudioVolume(0);
+        
+        /* reset the playing flag */
+        audio_is_playing = 0;
+
+        /* Close currently open file */
+        f_close(&file);
+    }
+}
 /*
  * MP3 player
  */
@@ -176,6 +211,7 @@ static FRESULT play_directory (const char* path, unsigned char seek) {
 						continue;
 					}
 
+					//mp3_get_bpm(buffer);
 					play_mp3(buffer);
 				}
 			}

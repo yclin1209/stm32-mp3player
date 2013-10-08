@@ -61,4 +61,5 @@ int mp3_decoder_run(struct mp3_decoder *decoder);
 void mp3_set_speed(float speed);
 int mp3_decoder_run_pvc(struct mp3_decoder *decoder);
 
+int mp3_bpm_detect_run(struct mp3_decoder *decoder);
 #endif
