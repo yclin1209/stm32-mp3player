@@ -30,9 +30,10 @@
 /*========================================================
  *                  Macros, Variables
  *======================================================*/
-#define MP3_AUDIO_BUF_SZ    (5 * 1024)  /* input buffer size */
+#define MP3_AUDIO_BUF_SZ    (8 * 1024)  /* input buffer size */
 
-#define MP3_DECODE_BUF_SZ   (2560)      /* output buffer size */
+//#define MP3_DECODE_BUF_SZ   (2560)      /* output buffer size */
+#define MP3_DECODE_BUF_SZ   (4096)      /* output buffer size */
 
 static uint8_t              mp3_fd_buffer[MP3_AUDIO_BUF_SZ];
 
@@ -43,7 +44,7 @@ static int16_t              decode_buf0[MP3_DECODE_BUF_SZ];
 static int16_t              decode_buf1[MP3_DECODE_BUF_SZ];
 static volatile uint8_t     buf_switch = 0;
 
-static float                cur_ratio = 2;
+volatile float              cur_ratio = 1;
 
 /*========================================================
  *          Private functions
@@ -227,6 +228,9 @@ int mp3_decoder_run(struct mp3_decoder *decoder) {
     }
 }
 
+void mp3_set_speed(float speed) {
+    cur_ratio = speed;
+}
 
 int mp3_decoder_run_pvc(struct mp3_decoder *decoder) {
     static int          cur_srate = 0;
@@ -237,6 +241,7 @@ int mp3_decoder_run_pvc(struct mp3_decoder *decoder) {
     int16_t             *buffer;
 
     int                 len;
+    static int          buf_pos = 0;
 
     /* get a decoder buffer */
     if (buf_switch == 0) {
@@ -249,15 +254,19 @@ int mp3_decoder_run_pvc(struct mp3_decoder *decoder) {
 
 reread:
     if (stream != NULL) {
-        len = sonicReadShortFromStream(stream, buffer, MP3_DECODE_BUF_SZ / cur_channel);
-        if (len > 0) {
+        len = sonicReadShortFromStream(stream, &buffer[buf_pos],
+                                       (MP3_DECODE_BUF_SZ - buf_pos) / cur_channel);
+        if (len == (MP3_DECODE_BUF_SZ - buf_pos) / cur_channel) {
             /* call the callback funtion */
-            decoder->output_cb(&decoder->frame_info, buffer, len * cur_channel);
+            decoder->output_cb(&decoder->frame_info, buffer, MP3_DECODE_BUF_SZ);
+            buf_pos = 0;
             return 0;
+        } else if (len > 0) {
+            buf_pos += len * cur_channel;
         }
     }
 
-    /* cannot get valid data, write some samples to Sonic */
+    /* cannot get enough data, write some samples to Sonic */
     if ((len = mp3_decoder_run_internal(decoder, tmp_buf)) > 0) {
         /* call the callback funtion */
         if (stream == NULL
@@ -273,7 +282,6 @@ reread:
                 return -1;
             }
         }
-            
         sonicSetSpeed(stream, cur_ratio);
 	    sonicWriteShortToStream(stream, tmp_buf, len / 2);
     } else if (len == -1) {
@@ -282,6 +290,7 @@ reread:
             sonicDestroyStream(stream);
             stream = NULL;
         }
+        buf_pos = 0;
         return -1;
     }
 
