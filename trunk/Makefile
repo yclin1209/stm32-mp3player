@@ -30,6 +30,12 @@ SRCS += Audio.c
 # sonic
 SRCS += sonic.c
 
+# fft
+SRCS += fft.c
+
+# bpm
+SRCS += bpm.c
+
 # USB
 SRCS += usbh_usr.c usb_bsp.c
 

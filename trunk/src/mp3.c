@@ -26,6 +26,7 @@
 #include "mp3dec.h"
 #include "mp3.h"
 #include "sonic.h"
+#include "bpm.h"
 
 /*========================================================
  *                  Macros, Variables
@@ -43,6 +44,11 @@ static uint8_t              mp3_fd_buffer[MP3_AUDIO_BUF_SZ];
 static int16_t              decode_buf0[MP3_DECODE_BUF_SZ];
 static int16_t              decode_buf1[MP3_DECODE_BUF_SZ];
 static volatile uint8_t     buf_switch = 0;
+
+static int16_t              tmp_buf[MP3_DECODE_BUF_SZ];
+
+static int                  cur_srate = 0;
+static int                  cur_channel = 0;
 
 volatile float              cur_ratio = 1;
 
@@ -233,10 +239,7 @@ void mp3_set_speed(float speed) {
 }
 
 int mp3_decoder_run_pvc(struct mp3_decoder *decoder) {
-    static int          cur_srate = 0;
-    static int          cur_channel = 0;
     static sonicStream  stream = NULL;
-    static int16_t      tmp_buf[MP3_DECODE_BUF_SZ];
 
     int16_t             *buffer;
 
@@ -295,4 +298,56 @@ reread:
     }
 
     goto reread;
+}
+
+/*
+ * BPM detection
+ */
+int mp3_bpm_detect_run(struct mp3_decoder *decoder) {
+    uint8_t         bpm_init_flag = 0;
+
+    uint16_t        bpm_num_samples = 0;
+    uint16_t        bpm_step = 0;
+
+    uint16_t        bpm = 0;
+
+    int             len;
+
+    int             pos = 0;
+    int             left = 0;
+
+    while ((len = mp3_decoder_run_internal(decoder, tmp_buf)) != -1) {
+        if (cur_srate != decoder->frame_info.samprate
+            || cur_channel != decoder->frame_info.nChans
+            || bpm_init_flag == 0) {
+
+            cur_srate   = decoder->frame_info.samprate;
+            cur_channel = 2;
+
+            BPM_release();
+            BPM_init(cur_srate, cur_channel);
+
+            BPM_set_freq_band(0, 4000);
+            bpm_num_samples = BPM_num_of_samples();
+            bpm_step = bpm_num_samples * cur_channel;
+
+            bpm_init_flag = 1;
+        }
+
+        left += len;
+        for (pos = 0; pos < left - bpm_step; pos += bpm_step) {
+            if (BPM_put_samples(&tmp_buf[pos], bpm_num_samples) == 1) {
+                /* BPM detect is done, get the value */
+                bpm             = BPM_get_bpm();
+
+                /* release the BPM module */
+                bpm_init_flag   = 0;
+                BPM_release();
+                return bpm;
+            }
+        }
+        left -= pos;
+    }
+    
+    return 0;
 }
