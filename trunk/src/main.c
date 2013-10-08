@@ -96,7 +96,8 @@ static void play_mp3(char* filename) {
             decoder->fetch_parameter    = (void *)&file;
             decoder->output_cb          = mp3_callback;
 
-            while (mp3_decoder_run(decoder) != -1);
+            //while (mp3_decoder_run(decoder) != -1);
+            while (mp3_decoder_run_pvc(decoder) != -1);
 
             /* delete decoder object */
             mp3_decoder_delete(decoder);

@@ -29,12 +29,18 @@ OUTPATH=build
 ###################################################
 #     		the compiler definitions
 ###################################################
-BINPATH=/opt/arm-2011.09/bin/
+BINPATH=/e/STM32_MP3_PHIL/gcc-arm-none-eabi-4.7-2013q2/bin
+#BINPATH=/opt/arm-2011.09/bin/
 
-CC=$(BINPATH)/arm-none-eabi-gcc
-OBJCOPY=$(BINPATH)/arm-none-eabi-objcopy
-OBJDUMP=$(BINPATH)/arm-none-eabi-objdump
-SIZE=$(BINPATH)/arm-none-eabi-size
+#CC=$(BINPATH)/arm-none-eabi-gcc
+#OBJCOPY=$(BINPATH)/arm-none-eabi-objcopy
+#OBJDUMP=$(BINPATH)/arm-none-eabi-objdump
+#SIZE=$(BINPATH)/arm-none-eabi-size
+
+CC=$(BINPATH)/arm-none-eabi-gcc.exe
+OBJCOPY=$(BINPATH)/arm-none-eabi-objcopy.exe
+OBJDUMP=$(BINPATH)/arm-none-eabi-objdump.exe
+SIZE=$(BINPATH)/arm-none-eabi-size.exe
 
 ###################################################
 # Check for valid float argument
@@ -44,8 +50,8 @@ SIZE=$(BINPATH)/arm-none-eabi-size
 ###################################################
 ifneq ($(FLOAT_TYPE), hard)
 ifneq ($(FLOAT_TYPE), soft)
-#override FLOAT_TYPE = hard
-override FLOAT_TYPE = soft
+override FLOAT_TYPE = hard
+#override FLOAT_TYPE = soft
 endif
 endif
 
