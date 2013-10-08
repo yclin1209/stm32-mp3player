@@ -27,6 +27,9 @@ SRCS = main.c stm32f4xx_it.c system_stm32f4xx.c syscalls.c mp3.c
 # Audio
 SRCS += Audio.c
 
+# sonic
+SRCS += sonic.c
+
 # USB
 SRCS += usbh_usr.c usb_bsp.c
 

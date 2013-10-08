@@ -57,5 +57,6 @@ void mp3_decoder_detach(struct mp3_decoder *decoder);
 struct mp3_decoder *mp3_decoder_create(void);
 void mp3_decoder_delete(struct mp3_decoder *decoder);
 int mp3_decoder_run(struct mp3_decoder *decoder);
+int mp3_decoder_run_pvc(struct mp3_decoder *decoder);
 
 #endif

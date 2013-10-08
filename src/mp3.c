@@ -25,6 +25,7 @@
 #include "main.h"
 #include "mp3dec.h"
 #include "mp3.h"
+#include "sonic.h"
 
 /*========================================================
  *                  Macros, Variables
@@ -41,6 +42,8 @@ static uint8_t              mp3_fd_buffer[MP3_AUDIO_BUF_SZ];
 static int16_t              decode_buf0[MP3_DECODE_BUF_SZ];
 static int16_t              decode_buf1[MP3_DECODE_BUF_SZ];
 static volatile uint8_t     buf_switch = 0;
+
+static float                cur_ratio = 2;
 
 /*========================================================
  *          Private functions
@@ -70,6 +73,88 @@ static int32_t mp3_decoder_fill_buffer(struct mp3_decoder *decoder) {
 
         return -1;
     }
+}
+
+int mp3_decoder_run_internal(struct mp3_decoder *decoder,
+                             int16_t *buffer) {
+    int             err;
+    int             i;
+
+    int             outputSamps;
+
+    if (decoder->read_ptr == NULL
+        || decoder->bytes_left < 2 * MAINBUF_SIZE) {
+        if (mp3_decoder_fill_buffer(decoder) != 0) {
+            return -1;
+        }
+    }
+
+    decoder->read_offset = MP3FindSyncWord(decoder->read_ptr, decoder->bytes_left);
+    if (decoder->read_offset < 0) {
+        /* outof sync, discard this data */
+
+        decoder->bytes_left = 0;
+        return 0;
+    }
+
+    decoder->read_ptr   += decoder->read_offset;
+    decoder->bytes_left -= decoder->read_offset;
+    if (decoder->bytes_left < 1024) {
+        /* fill more data */
+        if (mp3_decoder_fill_buffer(decoder) != 0) {
+            return -1;
+        }
+    }
+
+    err = MP3Decode(decoder->decoder, &decoder->read_ptr,
+                    (int *)&decoder->bytes_left, (short *)buffer, 0);
+
+    decoder->frames++;
+
+    if (err != ERR_MP3_NONE) {
+        switch (err) {
+            case ERR_MP3_INDATA_UNDERFLOW:
+                decoder->bytes_left = 0;
+                if (mp3_decoder_fill_buffer(decoder) != 0) {
+                    return -1;
+                }
+                break;
+
+            case ERR_MP3_MAINDATA_UNDERFLOW:
+                /* do nothing - next call to decode will provide more mainData */
+                break;
+
+            default:
+                /* unknown error: %d, left: %d\n", err, decoder->bytes_left */
+
+                if (decoder->bytes_left > 0) {
+                    decoder->bytes_left--;
+                    decoder->read_ptr++;
+                } else {
+                    return -1;
+                }
+                break;
+        }
+    } else {
+        /* no error */
+        MP3GetLastFrameInfo(decoder->decoder, &decoder->frame_info);
+
+        /* write to sound device */
+        outputSamps = decoder->frame_info.outputSamps;
+        if (outputSamps > 0) {
+            if (decoder->frame_info.nChans == 1) {
+                for (i = outputSamps - 1; i >= 0; i--) {
+                    buffer[i * 2]       = buffer[i];
+                    buffer[i * 2 + 1]   = buffer[i];
+                }
+                outputSamps *= 2;
+            }
+        }
+
+        return outputSamps;
+    }
+
+    return 0;
 }
 
 /*========================================================
@@ -116,37 +201,13 @@ void mp3_decoder_delete(struct mp3_decoder *decoder) {
     decoder = NULL;
 }
 
+/*
+ * ret: 0, decoder is running
+ *      -1, some error occuerd, should stop the decoding
+ */
 int mp3_decoder_run(struct mp3_decoder *decoder) {
-    int             err;
-    int             i;
-
-    int             outputSamps;
-
     int16_t         *buffer;
-
-    if (decoder->read_ptr == NULL
-        || decoder->bytes_left < 2 * MAINBUF_SIZE) {
-        if (mp3_decoder_fill_buffer(decoder) != 0) {
-            return -1;
-        }
-    }
-
-    decoder->read_offset = MP3FindSyncWord(decoder->read_ptr, decoder->bytes_left);
-    if (decoder->read_offset < 0) {
-        /* outof sync, discard this data */
-
-        decoder->bytes_left = 0;
-        return 0;
-    }
-
-    decoder->read_ptr   += decoder->read_offset;
-    decoder->bytes_left -= decoder->read_offset;
-    if (decoder->bytes_left < 1024) {
-        /* fill more data */
-        if (mp3_decoder_fill_buffer(decoder) != 0) {
-            return -1;
-        }
-    }
+    int             len = 0;
 
     /* get a decoder buffer */
     if (buf_switch == 0) {
@@ -157,54 +218,72 @@ int mp3_decoder_run(struct mp3_decoder *decoder) {
         buf_switch  = 0;
     }
     
-    err = MP3Decode(decoder->decoder, &decoder->read_ptr,
-                    (int *)&decoder->bytes_left, (short *)buffer, 0);
-
-    decoder->frames++;
-
-    if (err != ERR_MP3_NONE) {
-        switch (err) {
-            case ERR_MP3_INDATA_UNDERFLOW:
-                decoder->bytes_left = 0;
-                if (mp3_decoder_fill_buffer(decoder) != 0) {
-                    return -1;
-                }
-                break;
-
-            case ERR_MP3_MAINDATA_UNDERFLOW:
-                /* do nothing - next call to decode will provide more mainData */
-                break;
-
-            default:
-                /* unknown error: %d, left: %d\n", err, decoder->bytes_left */
-
-                if (decoder->bytes_left > 0) {
-                    decoder->bytes_left--;
-                    decoder->read_ptr++;
-                } else {
-                    return -1;
-                }
-                break;
-        }
+    if ((len = mp3_decoder_run_internal(decoder, buffer)) > 0) {
+        /* call the callback funtion */
+        decoder->output_cb(&decoder->frame_info, buffer, len);
+        return 0;
     } else {
-        /* no error */
-        MP3GetLastFrameInfo(decoder->decoder, &decoder->frame_info);
+        return len;
+    }
+}
 
-        /* write to sound device */
-        outputSamps = decoder->frame_info.outputSamps;
-        if (outputSamps > 0) {
-            if (decoder->frame_info.nChans == 1) {
-                for (i = outputSamps - 1; i >= 0; i--) {
-                    buffer[i * 2]       = buffer[i];
-                    buffer[i * 2 + 1]   = buffer[i];
-                }
-                outputSamps *= 2;
-            }
 
+int mp3_decoder_run_pvc(struct mp3_decoder *decoder) {
+    static int          cur_srate = 0;
+    static int          cur_channel = 0;
+    static sonicStream  stream = NULL;
+    static int16_t      tmp_buf[MP3_DECODE_BUF_SZ];
+
+    int16_t             *buffer;
+
+    int                 len;
+
+    /* get a decoder buffer */
+    if (buf_switch == 0) {
+        buffer      = decode_buf1;
+        buf_switch  = 1;
+    } else {
+        buffer      = decode_buf0;
+        buf_switch  = 0;
+    }
+
+reread:
+    if (stream != NULL) {
+        len = sonicReadShortFromStream(stream, buffer, MP3_DECODE_BUF_SZ / cur_channel);
+        if (len > 0) {
             /* call the callback funtion */
-            decoder->output_cb(&decoder->frame_info, buffer, outputSamps);
+            decoder->output_cb(&decoder->frame_info, buffer, len * cur_channel);
+            return 0;
         }
     }
 
-    return 0;
+    /* cannot get valid data, write some samples to Sonic */
+    if ((len = mp3_decoder_run_internal(decoder, tmp_buf)) > 0) {
+        /* call the callback funtion */
+        if (stream == NULL
+            || cur_srate != decoder->frame_info.samprate
+            || cur_channel != 2) {
+
+            cur_srate   = decoder->frame_info.samprate;
+            cur_channel = 2;
+
+            if (stream) sonicDestroyStream(stream);
+            stream = sonicCreateStream(cur_srate, 2);
+            if (stream == NULL) {
+                return -1;
+            }
+        }
+            
+        sonicSetSpeed(stream, cur_ratio);
+	    sonicWriteShortToStream(stream, tmp_buf, len / 2);
+    } else if (len == -1) {
+        /* some thing error, destroy the sonic stream */
+        if (stream) {
+            sonicDestroyStream(stream);
+            stream = NULL;
+        }
+        return -1;
+    }
+
+    goto reread;
 }
