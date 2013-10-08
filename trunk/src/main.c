@@ -44,6 +44,8 @@ static FIL                  file;
 
 static volatile uint8_t     audio_is_playing = 0;
 
+/* just for test */
+extern float                cur_ratio;
 
 /*========================================================
  *          Private functions
@@ -230,6 +232,13 @@ void TimingDelay_Decrement(void) {
 		time_var1--;
 	}
 	time_var2++;
+
+    /* just for test */
+    if (time_var2 > 10000) {
+        time_var2 = 0;
+        cur_ratio += 0.5;
+        if (cur_ratio > 1.5) cur_ratio = 0.5;
+    }
 }
 
 /*
